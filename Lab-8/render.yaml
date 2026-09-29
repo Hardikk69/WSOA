@@ -1,0 +1,64 @@
+# Render Blueprint - deploys the gateway + 3 services as Docker containers.
+# Assumes this Lab-7 folder is the repository root.
+# Every location/secret is `sync: false`: Render asks for it in the dashboard
+# on first deploy, so no cloud URL or Atlas credential is committed.
+services:
+  - type: web
+    name: campusconnect-gateway
+    runtime: docker
+    plan: free
+    rootDir: api-gateway
+    dockerfilePath: ./api-gateway/Dockerfile
+    dockerContext: ./api-gateway
+    healthCheckPath: /health
+    envVars:
+      - key: USER_SERVICE_URL        # https://campusconnect-user-service.onrender.com
+        sync: false
+      - key: PRODUCT_SERVICE_URL     # https://campusconnect-product-service.onrender.com
+        sync: false
+      - key: ORDER_SERVICE_URL       # https://campusconnect-order-service.onrender.com
+        sync: false
+      - key: PROXY_TIMEOUT_MS        # free services cold-start in ~1 min
+        value: "90000"
+
+  - type: web
+    name: campusconnect-user-service
+    runtime: docker
+    plan: free
+    rootDir: user-service
+    dockerfilePath: ./user-service/Dockerfile
+    dockerContext: ./user-service
+    healthCheckPath: /
+    envVars:
+      - key: MONGO_URI               # Atlas .../userdb
+        sync: false
+
+  - type: web
+    name: campusconnect-product-service
+    runtime: docker
+    plan: free
+    rootDir: product-service
+    dockerfilePath: ./product-service/Dockerfile
+    dockerContext: ./product-service
+    healthCheckPath: /
+    envVars:
+      - key: MONGO_URI               # Atlas .../productdb
+        sync: false
+
+  - type: web
+    name: campusconnect-order-service
+    runtime: docker
+    plan: free
+    rootDir: order-service
+    dockerfilePath: ./order-service/Dockerfile
+    dockerContext: ./order-service
+    healthCheckPath: /
+    envVars:
+      - key: MONGO_URI               # Atlas .../orderdb
+        sync: false
+      - key: USER_SERVICE_URL
+        sync: false
+      - key: PRODUCT_SERVICE_URL
+        sync: false
+      - key: REQUEST_TIMEOUT_MS      # wait for a sleeping dependency to wake
+        value: "60000"

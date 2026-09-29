@@ -1,0 +1,37 @@
+# Basic CI: for every microservice -> checkout, install, test, build Docker image.
+# Lab 8 services live in Lab-8/; only runs when they change.
+name: CI
+
+on:
+  push:
+    paths: ["Lab-8/**", ".github/workflows/ci.yml"]
+  pull_request:
+    paths: ["Lab-8/**", ".github/workflows/ci.yml"]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api-gateway, user-service, product-service, order-service]
+    defaults:
+      run:
+        working-directory: Lab-8/${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Lab-8/${{ matrix.service }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build Docker image
+        run: docker build -t ${{ matrix.service }}:${{ github.sha }} .
