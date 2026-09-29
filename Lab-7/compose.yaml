@@ -1,16 +1,36 @@
 name: campusconnect
 
 services:
-  # ---------- User Service + its own database ----------
+  # ---------- API Gateway: the ONLY container with a host port ----------
+  api-gateway:
+    build: ./api-gateway
+    image: api-gateway:v1
+    container_name: api-gateway
+    ports:
+      - "${GATEWAY_PORT:-8000}:8000"
+    environment:
+      PORT: 8000
+      # Service registry - locations come from .env, not from gateway code
+      USER_SERVICE_URL: ${USER_SERVICE_URL}
+      PRODUCT_SERVICE_URL: ${PRODUCT_SERVICE_URL}
+      ORDER_SERVICE_URL: ${ORDER_SERVICE_URL}
+      PROXY_TIMEOUT_MS: ${PROXY_TIMEOUT_MS:-10000}
+    depends_on:
+      - user-service
+      - product-service
+      - order-service
+    networks:
+      - campus-network
+    restart: unless-stopped
+
+  # ---------- User Service + its own database (internal only) ----------
   user-service:
     build: ./user-service
     image: user-service:v1
     container_name: user-service
-    ports:
-      - "${USER_SERVICE_PORT:-3001}:${USER_SERVICE_PORT:-3001}"
     environment:
       PORT: ${USER_SERVICE_PORT:-3001}
-      MONGO_URI: mongodb://user-db:27017/userdb
+      MONGO_URI: ${USER_MONGO_URI:-mongodb://user-db:27017/userdb}
     depends_on:
       - user-db
     networks:
@@ -25,16 +45,14 @@ services:
     networks:
       - campus-network
 
-  # ---------- Product Service + its own database ----------
+  # ---------- Product Service + its own database (internal only) ----------
   product-service:
     build: ./product-service
     image: product-service:v1
     container_name: product-service
-    ports:
-      - "${PRODUCT_SERVICE_PORT:-3002}:${PRODUCT_SERVICE_PORT:-3002}"
     environment:
       PORT: ${PRODUCT_SERVICE_PORT:-3002}
-      MONGO_URI: mongodb://product-db:27017/productdb
+      MONGO_URI: ${PRODUCT_MONGO_URI:-mongodb://product-db:27017/productdb}
     depends_on:
       - product-db
     networks:
@@ -49,18 +67,16 @@ services:
     networks:
       - campus-network
 
-  # ---------- Order Service + its own database ----------
+  # ---------- Order Service + its own database (internal only) ----------
   order-service:
     build: ./order-service
     image: order-service:v1
     container_name: order-service
-    ports:
-      - "${ORDER_SERVICE_PORT:-3003}:${ORDER_SERVICE_PORT:-3003}"
     environment:
       PORT: ${ORDER_SERVICE_PORT:-3003}
-      MONGO_URI: mongodb://order-db:27017/orderdb
-      USER_SERVICE_URL: ${USER_SERVICE_URL:-http://user-service:3001}
-      PRODUCT_SERVICE_URL: ${PRODUCT_SERVICE_URL:-http://product-service:3002}
+      MONGO_URI: ${ORDER_MONGO_URI:-mongodb://order-db:27017/orderdb}
+      USER_SERVICE_URL: ${USER_SERVICE_URL}
+      PRODUCT_SERVICE_URL: ${PRODUCT_SERVICE_URL}
       REQUEST_TIMEOUT_MS: ${REQUEST_TIMEOUT_MS:-3000}
     depends_on:
       - order-db
@@ -78,7 +94,7 @@ services:
     networks:
       - campus-network
 
-# Databases have no host port mapping: only their owning service can reach them.
+# No ports on services or databases: reachable only inside campus-network.
 networks:
   campus-network:
     name: campus-network
