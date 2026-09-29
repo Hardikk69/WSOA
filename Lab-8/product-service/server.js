@@ -13,7 +13,7 @@ app.use(express.json());
 
 // Product Service owns its own database (productdb). No other service connects to it.
 mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log(`[product-service] Connected to MongoDB: ${process.env.MONGO_URI}`))
+    .then(() => console.log(`[product-service] Connected to MongoDB database: ${mongoose.connection.name}`))
     .catch((err) => console.error('[product-service] MongoDB connection error:', err.message));
 
 const validateProduct = ({ name, price, stock }) => {

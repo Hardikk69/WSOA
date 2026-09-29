@@ -19,7 +19,7 @@ app.use(express.json());
 
 // Order Service owns its own database (orderdb). No other service connects to it.
 mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log(`[order-service] Connected to MongoDB: ${process.env.MONGO_URI}`))
+    .then(() => console.log(`[order-service] Connected to MongoDB database: ${mongoose.connection.name}`))
     .catch((err) => console.error('[order-service] MongoDB connection error:', err.message));
 
 class DependencyError extends Error {

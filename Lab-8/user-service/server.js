@@ -13,7 +13,7 @@ app.use(express.json());
 
 // User Service owns its own database (userdb). No other service connects to it.
 mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log(`[user-service] Connected to MongoDB: ${process.env.MONGO_URI}`))
+    .then(() => console.log(`[user-service] Connected to MongoDB database: ${mongoose.connection.name}`))
     .catch((err) => console.error('[user-service] MongoDB connection error:', err.message));
 
 const validateUser = ({ name, email, semester }) => {
