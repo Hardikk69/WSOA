@@ -1,0 +1,222 @@
+/* Basic Student Stylesheet for Lab 1 */
+
+body {
+    font-family: sans-serif;
+    background-color: #f0f0f0;
+    color: #000000;
+    margin: 0;
+    padding: 0;
+}
+
+/* Simple Dark Mode (Plain body class toggle) */
+body.dark-theme {
+    background-color: #333333;
+    color: #ffffff;
+}
+
+/* Navigation Bar */
+header {
+    background-color: #333;
+    color: white;
+    padding: 10px;
+    text-align: center;
+}
+
+body.dark-theme header {
+    background-color: #111;
+}
+
+header h1 {
+    margin: 5px 0;
+}
+
+.nav-links {
+    margin: 10px 0 0 0;
+    padding: 0;
+}
+
+.nav-links li {
+    display: inline;
+    margin: 0 15px;
+}
+
+.nav-links a {
+    color: white;
+    text-decoration: none;
+}
+
+.nav-links a:hover {
+    color: #ffcc00;
+}
+
+#theme-btn {
+    padding: 5px 10px;
+    cursor: pointer;
+}
+
+/* Layout container */
+main {
+    width: 90%;
+    margin: 20px auto;
+}
+
+/* Student welcome info */
+.welcome-section {
+    background-color: #e6f2ff;
+    border: 2px solid #99ccff;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+body.dark-theme .welcome-section {
+    background-color: #444;
+    border-color: #666;
+}
+
+/* Dynamic clock */
+#live-time {
+    font-weight: bold;
+    color: #ff0000;
+}
+
+body.dark-theme #live-time {
+    color: #ffcc00;
+}
+
+/* Cards styled as plain boxes */
+.summary-grid {
+    display: block;
+    margin-bottom: 20px;
+}
+
+.summary-card {
+    background-color: #ffffff;
+    border: 1px solid #cccccc;
+    display: inline-block;
+    width: 17%;
+    margin-right: 2%;
+    padding: 10px;
+    text-align: center;
+    box-sizing: border-box;
+}
+
+body.dark-theme .summary-card {
+    background-color: #555555;
+    border-color: #777777;
+}
+
+/* Two Columns (Timetable and Announcements) using Float */
+.content-columns {
+    overflow: auto;
+    margin-bottom: 20px;
+}
+
+.column {
+    width: 48%;
+    float: left;
+    background-color: #ffffff;
+    border: 1px solid #cccccc;
+    padding: 15px;
+    box-sizing: border-box;
+}
+
+body.dark-theme .column {
+    background-color: #555555;
+    border-color: #777777;
+}
+
+.column:last-child {
+    float: right;
+}
+
+/* Timetable Table */
+table, th, td {
+    border: 1px solid black;
+    border-collapse: collapse;
+}
+
+body.dark-theme table, body.dark-theme th, body.dark-theme td {
+    border-color: #ffffff;
+}
+
+table {
+    width: 100%;
+    margin-top: 10px;
+}
+
+th, td {
+    padding: 8px;
+    text-align: left;
+}
+
+/* Announcements section */
+.announcement {
+    margin-bottom: 10px;
+    border-bottom: 1px dashed #cccccc;
+    padding-bottom: 5px;
+}
+
+.announcement-title {
+    color: blue;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+body.dark-theme .announcement-title {
+    color: #ffcc00;
+}
+
+.announcement-desc {
+    display: none;
+    background-color: #ffffcc;
+    padding: 8px;
+    color: black;
+    margin-top: 5px;
+}
+
+/* Services */
+.services-section {
+    background-color: #ffffff;
+    border: 1px solid #cccccc;
+    padding: 15px;
+    clear: both;
+}
+
+body.dark-theme .services-section {
+    background-color: #555555;
+    border-color: #777777;
+}
+
+.search-container {
+    margin-bottom: 10px;
+}
+
+.services-list {
+    margin-top: 10px;
+}
+
+.service-item {
+    background-color: #e0e0e0;
+    border: 1px solid #999999;
+    padding: 10px;
+    margin-bottom: 5px;
+    cursor: pointer;
+    color: black;
+}
+
+.service-item:hover {
+    background-color: #cccccc;
+}
+
+/* Footer styling */
+footer {
+    background-color: #333333;
+    color: white;
+    text-align: center;
+    padding: 15px;
+    margin-top: 20px;
+}
+
+footer a {
+    color: #ffcc00;
+}
