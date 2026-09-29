@@ -1,0 +1,90 @@
+name: campusconnect
+
+services:
+  # ---------- User Service + its own database ----------
+  user-service:
+    build: ./user-service
+    image: user-service:v1
+    container_name: user-service
+    ports:
+      - "${USER_SERVICE_PORT:-3001}:${USER_SERVICE_PORT:-3001}"
+    environment:
+      PORT: ${USER_SERVICE_PORT:-3001}
+      MONGO_URI: mongodb://user-db:27017/userdb
+    depends_on:
+      - user-db
+    networks:
+      - campus-network
+    restart: unless-stopped
+
+  user-db:
+    image: mongo:7
+    container_name: user-db
+    volumes:
+      - user-db-data:/data/db
+    networks:
+      - campus-network
+
+  # ---------- Product Service + its own database ----------
+  product-service:
+    build: ./product-service
+    image: product-service:v1
+    container_name: product-service
+    ports:
+      - "${PRODUCT_SERVICE_PORT:-3002}:${PRODUCT_SERVICE_PORT:-3002}"
+    environment:
+      PORT: ${PRODUCT_SERVICE_PORT:-3002}
+      MONGO_URI: mongodb://product-db:27017/productdb
+    depends_on:
+      - product-db
+    networks:
+      - campus-network
+    restart: unless-stopped
+
+  product-db:
+    image: mongo:7
+    container_name: product-db
+    volumes:
+      - product-db-data:/data/db
+    networks:
+      - campus-network
+
+  # ---------- Order Service + its own database ----------
+  order-service:
+    build: ./order-service
+    image: order-service:v1
+    container_name: order-service
+    ports:
+      - "${ORDER_SERVICE_PORT:-3003}:${ORDER_SERVICE_PORT:-3003}"
+    environment:
+      PORT: ${ORDER_SERVICE_PORT:-3003}
+      MONGO_URI: mongodb://order-db:27017/orderdb
+      USER_SERVICE_URL: ${USER_SERVICE_URL:-http://user-service:3001}
+      PRODUCT_SERVICE_URL: ${PRODUCT_SERVICE_URL:-http://product-service:3002}
+      REQUEST_TIMEOUT_MS: ${REQUEST_TIMEOUT_MS:-3000}
+    depends_on:
+      - order-db
+      - user-service
+      - product-service
+    networks:
+      - campus-network
+    restart: unless-stopped
+
+  order-db:
+    image: mongo:7
+    container_name: order-db
+    volumes:
+      - order-db-data:/data/db
+    networks:
+      - campus-network
+
+# Databases have no host port mapping: only their owning service can reach them.
+networks:
+  campus-network:
+    name: campus-network
+    driver: bridge
+
+volumes:
+  user-db-data:
+  product-db-data:
+  order-db-data:

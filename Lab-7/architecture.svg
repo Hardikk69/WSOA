@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 620" font-family="Segoe UI, Arial, sans-serif" font-size="14">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#334155"/>
+    </marker>
+    <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c2410c"/>
+    </marker>
+  </defs>
+  <rect width="960" height="620" fill="#ffffff"/>
+  <text x="480" y="32" text-anchor="middle" font-size="20" font-weight="700" fill="#1e293b">CampusConnect – Lab 6 Microservices Architecture</text>
+
+  <!-- Client + optional gateway -->
+  <rect x="120" y="56" width="260" height="56" rx="8" fill="#f1f5f9" stroke="#334155"/>
+  <text x="250" y="80" text-anchor="middle" font-weight="600">Client / Postman / React</text>
+  <text x="250" y="99" text-anchor="middle" font-size="12" fill="#475569">host: localhost:3001 / 3002 / 3003</text>
+
+  <rect x="580" y="56" width="260" height="56" rx="8" fill="#fff" stroke="#64748b" stroke-dasharray="6 4"/>
+  <text x="710" y="80" text-anchor="middle" font-weight="600" fill="#475569">API Gateway (optional concept)</text>
+  <text x="710" y="99" text-anchor="middle" font-size="12" fill="#64748b">/users • /products • /orders → services</text>
+  <line x1="380" y1="84" x2="576" y2="84" stroke="#64748b" stroke-dasharray="6 4" marker-end="url(#a)"/>
+
+  <!-- Docker network boundary -->
+  <rect x="30" y="150" width="900" height="440" rx="12" fill="#eff6ff" stroke="#2563eb" stroke-width="2" stroke-dasharray="10 5"/>
+  <text x="50" y="176" font-weight="700" fill="#1d4ed8">Docker bridge network: campus-network</text>
+  <text x="910" y="176" text-anchor="end" font-size="12" fill="#1d4ed8">containers resolve each other by Compose service name</text>
+
+  <!-- Host port mappings -->
+  <line x1="170" y1="112" x2="170" y2="226" stroke="#334155" marker-end="url(#a)"/>
+  <text x="178" y="140" font-size="12" fill="#334155">3001:3001</text>
+  <line x1="250" y1="112" x2="480" y2="226" stroke="#334155" marker-end="url(#a)"/>
+  <text x="372" y="140" font-size="12" fill="#334155">3002:3002</text>
+  <line x1="330" y1="112" x2="770" y2="226" stroke="#334155" marker-end="url(#a)"/>
+  <text x="560" y="140" font-size="12" fill="#334155">3003:3003</text>
+
+  <!-- Services -->
+  <g>
+    <rect x="70" y="228" width="220" height="110" rx="10" fill="#dbeafe" stroke="#1e40af" stroke-width="1.5"/>
+    <text x="180" y="256" text-anchor="middle" font-weight="700" font-size="16">user-service</text>
+    <text x="180" y="276" text-anchor="middle" font-size="12">Node 22 + Express · :3001</text>
+    <text x="180" y="298" text-anchor="middle" font-size="12" fill="#334155">GET/POST /users</text>
+    <text x="180" y="316" text-anchor="middle" font-size="12" fill="#334155">GET/PUT/DELETE /users/{id}</text>
+  </g>
+  <g>
+    <rect x="370" y="228" width="220" height="110" rx="10" fill="#dcfce7" stroke="#166534" stroke-width="1.5"/>
+    <text x="480" y="256" text-anchor="middle" font-weight="700" font-size="16">product-service</text>
+    <text x="480" y="276" text-anchor="middle" font-size="12">Node 22 + Express · :3002</text>
+    <text x="480" y="298" text-anchor="middle" font-size="12" fill="#334155">GET/POST /products</text>
+    <text x="480" y="316" text-anchor="middle" font-size="12" fill="#334155">GET/PUT/DELETE /products/{id}</text>
+  </g>
+  <g>
+    <rect x="670" y="228" width="220" height="110" rx="10" fill="#ffedd5" stroke="#9a3412" stroke-width="1.5"/>
+    <text x="780" y="256" text-anchor="middle" font-weight="700" font-size="16">order-service</text>
+    <text x="780" y="276" text-anchor="middle" font-size="12">Node 22 + Express · :3003</text>
+    <text x="780" y="298" text-anchor="middle" font-size="12" fill="#334155">POST /orders · GET /orders</text>
+    <text x="780" y="316" text-anchor="middle" font-size="12" fill="#334155">GET /orders/{id}</text>
+  </g>
+
+  <!-- Service-to-service calls (curved over the top of product-service) -->
+  <path d="M700,338 C640,420 320,420 250,340" fill="none" stroke="#c2410c" stroke-width="2" marker-end="url(#r)"/>
+  <rect x="345" y="423" width="260" height="18" fill="#eff6ff"/>
+  <text x="475" y="436"text-anchor="middle" font-size="12" fill="#c2410c" font-weight="600">GET http://user-service:3001/users/{id}</text>
+  <line x1="668" y1="283" x2="594" y2="283" stroke="#c2410c" stroke-width="2" marker-end="url(#r)"/>
+  <text x="631" y="222" text-anchor="middle" font-size="11" fill="#c2410c" font-weight="600">GET http://product-service:3002</text>
+  <text x="631" y="236" text-anchor="middle" font-size="11" fill="#c2410c" font-weight="600">/products/{id}</text>
+
+  <!-- Databases -->
+  <g font-size="12">
+    <line x1="180" y1="338" x2="180" y2="478" stroke="#334155" marker-end="url(#a)"/>
+    <ellipse cx="180" cy="490" rx="90" ry="12" fill="#e2e8f0" stroke="#334155"/>
+    <rect x="90" y="490" width="180" height="50" fill="#e2e8f0" stroke="none"/>
+    <path d="M90,490 V540 A90,12 0 0 0 270,540 V490" fill="#e2e8f0" stroke="#334155"/>
+    <text x="180" y="512" text-anchor="middle" font-weight="700">user-db (mongo:7)</text>
+    <text x="180" y="530" text-anchor="middle">userdb · vol user-db-data</text>
+
+    <line x1="480" y1="338" x2="480" y2="478" stroke="#334155" marker-end="url(#a)"/>
+    <ellipse cx="480" cy="490" rx="90" ry="12" fill="#e2e8f0" stroke="#334155"/>
+    <path d="M390,490 V540 A90,12 0 0 0 570,540 V490" fill="#e2e8f0" stroke="#334155"/>
+    <text x="480" y="512" text-anchor="middle" font-weight="700">product-db (mongo:7)</text>
+    <text x="480" y="530" text-anchor="middle">productdb · vol product-db-data</text>
+
+    <line x1="780" y1="338" x2="780" y2="478" stroke="#334155" marker-end="url(#a)"/>
+    <ellipse cx="780" cy="490" rx="90" ry="12" fill="#e2e8f0" stroke="#334155"/>
+    <path d="M690,490 V540 A90,12 0 0 0 870,540 V490" fill="#e2e8f0" stroke="#334155"/>
+    <text x="780" y="512" text-anchor="middle" font-weight="700">order-db (mongo:7)</text>
+    <text x="780" y="530" text-anchor="middle">orderdb · vol order-db-data</text>
+  </g>
+  <text x="480" y="576" text-anchor="middle" font-size="12" fill="#475569">Database per service: each DB is reachable only by its owner (no host port). Order Service never queries user-db or product-db.</text>
+</svg>
