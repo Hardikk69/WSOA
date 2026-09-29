@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  labels:
+    app: user-service
+    app.kubernetes.io/part-of: campusconnect
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: user-service
+  template:
+    metadata:
+      labels:
+        app: user-service
+        app.kubernetes.io/part-of: campusconnect
+      annotations:
+        prometheus.io/scrape: "true"
+    spec:
+      containers:
+        - name: user-service
+          image: user-service:v2
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3001
+          env:
+            - name: PORT
+              value: "3001"
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: mongo-secret
+                  key: USER_MONGO_URI
+          readinessProbe:
+            httpGet: { path: /, port: 3001 }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /, port: 3001 }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
