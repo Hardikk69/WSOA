@@ -1,0 +1,30 @@
+services:
+  api:
+    build: .
+    container_name: student-api
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      MONGO_URI: mongodb://mongodb:27017/campusconnect
+    depends_on:
+      - mongodb
+    networks:
+      - student-network
+
+  mongodb:
+    image: mongo
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - student-mongo-data:/data/db
+    networks:
+      - student-network
+
+networks:
+  student-network:
+    driver: bridge
+
+volumes:
+  student-mongo-data:
