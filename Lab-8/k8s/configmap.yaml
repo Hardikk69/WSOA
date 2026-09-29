@@ -1,0 +1,16 @@
+# Non-sensitive configuration. Service locations use Kubernetes Service names
+# (stable DNS inside the namespace) - never Pod IPs.
+# MongoDB Atlas URIs are sensitive and live in the `mongo-secret` Secret,
+# created with kubectl (see README) and never committed.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: campusconnect-config
+  labels:
+    app.kubernetes.io/part-of: campusconnect
+data:
+  USER_SERVICE_URL: http://user-service:3001
+  PRODUCT_SERVICE_URL: http://product-service:3002
+  ORDER_SERVICE_URL: http://order-service:3003
+  PROXY_TIMEOUT_MS: "10000"
+  REQUEST_TIMEOUT_MS: "3000"
