@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
+const client = require('prom-client');
 require('dotenv').config();
 
 const Order = require('./models/Order');
@@ -16,6 +17,22 @@ const REQUEST_TIMEOUT_MS = parseInt(process.env.REQUEST_TIMEOUT_MS) || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// Prometheus metrics: traffic, errors (status label) and latency
+client.collectDefaultMetrics();
+const httpRequests = new client.Counter({ name: 'http_requests_total', help: 'HTTP requests handled', labelNames: ['method', 'status'] });
+const httpDuration = new client.Histogram({ name: 'http_request_duration_seconds', help: 'HTTP request duration', labelNames: ['method', 'status'] });
+app.use((req, res, next) => {
+    if (req.path === '/metrics') return next();
+    const end = httpDuration.startTimer();
+    res.on('finish', () => {
+        const labels = { method: req.method, status: res.statusCode };
+        httpRequests.inc(labels);
+        end(labels);
+    });
+    next();
+});
+app.get('/metrics', async (req, res) => res.type(client.register.contentType).send(await client.register.metrics()));
 
 // Order Service owns its own database (orderdb). No other service connects to it.
 mongoose.connect(process.env.MONGO_URI)

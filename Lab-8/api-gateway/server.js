@@ -1,5 +1,6 @@
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
+const client = require('prom-client');
 require('dotenv').config();
 
 const app = express();
@@ -23,15 +24,27 @@ if (missing.length) {
 
 const routeFor = (path) => registry.find((s) => path === s.prefix || path.startsWith(`${s.prefix}/`));
 
-// Request logging: method, path, target service, response status, duration
+// Prometheus metrics: traffic, errors (status label) and latency per target service
+client.collectDefaultMetrics();
+const labelNames = ['method', 'target', 'status'];
+const httpRequests = new client.Counter({ name: 'http_requests_total', help: 'HTTP requests handled', labelNames });
+const httpDuration = new client.Histogram({ name: 'http_request_duration_seconds', help: 'HTTP request duration', labelNames });
+
+// Request logging + metrics: method, path, target service, response status, duration
 app.use((req, res, next) => {
+    if (req.path === '/metrics') return next();
     const start = Date.now();
     res.on('finish', () => {
         const target = routeFor(req.path)?.name || 'gateway';
+        const labels = { method: req.method, target, status: res.statusCode };
+        httpRequests.inc(labels);
+        httpDuration.observe(labels, (Date.now() - start) / 1000);
         console.log(`[api-gateway] ${req.method} ${req.originalUrl} -> ${target} ${res.statusCode} ${Date.now() - start}ms`);
     });
     next();
 });
+
+app.get('/metrics', async (req, res) => res.type(client.register.contentType).send(await client.register.metrics()));
 
 // Gateway's own health check - answered here, never proxied
 app.get('/health', (req, res) => res.status(200).json({
