@@ -1,237 +1,249 @@
-# Lab 7: API Gateway, Service Discovery & Cloud Deployment – CampusConnect
+# Lab 8: Kubernetes, Basic CI/CD & Monitoring – CampusConnect
 
 ## Overview
-Lab 6's three microservices (User, Product, Order) are copied here **unchanged** – same resources, endpoints and status codes. This lab adds:
+Lab 7's application (API Gateway + User / Product / Order services, MongoDB Atlas) is copied here and moved onto a DevOps workflow:
 
-1. **`api-gateway`** – a real single entry point (Express + `http-proxy-middleware`) with routing, `GET /health`, request logging and 502/503 error handling.
-2. **Configuration-based service discovery** – the gateway builds its routing table from `USER_SERVICE_URL`, `PRODUCT_SERVICE_URL`, `ORDER_SERVICE_URL`; no URL is written in gateway code.
-3. **Cloud deployment** – all four containers on **Render** (Docker runtime) with data in **MongoDB Atlas**.
+1. **Kubernetes** – all four services run as Deployments + Services in namespace `lab8`; configuration in a ConfigMap, Atlas URIs in a Secret; scaling and self-healing demonstrated.
+2. **GitHub Actions CI** – on every push / pull request each service is checked out, installed (`npm ci`), tested (`npm test`) and built into a Docker image.
+3. **Prometheus + Grafana** – every service exposes `/metrics`; Prometheus discovers the pods and Grafana shows availability, traffic, errors and latency.
 
-Public gateway URL: **`https://campusconnect-gateway.onrender.com`** ← replace with the URL Render shows after deploying.
+### Changes to the Lab 7 code (the only ones)
+| Change | Why |
+|---|---|
+| `prom-client` + a small middleware and `GET /metrics` in each `server.js` | Prometheus needs metrics to scrape: `http_requests_total`, `http_request_duration_seconds`, plus Node process defaults |
+| `test/server.test.js` + `"test": "node --test"` in each service | CI needs tests. They start the real server with no database and check health, validation, 404s, gateway 503 handling and `/metrics` |
+| `package-lock.json` for every service | `npm ci` in CI needs a lockfile |
+| "Connected to MongoDB" log prints the database name, not the URI | the URI contains Atlas credentials and would leak into `kubectl logs` |
+| `.env` added to `.gitignore` | never commit credentials |
+
+Business logic, routes and status codes are unchanged. The Lab 7 `compose.yaml` and `render.yaml` still work.
 
 ## Architecture
 ![Architecture](architecture.svg)
 
-| Layer | Responsibility | Reachable from |
-|---|---|---|
-| Client / Postman | Sends every request to one address | Internet |
-| API Gateway | Routes `/users`, `/products`, `/orders`; logging; error handling | Internet (only published port) |
-| User / Product / Order | Own business logic and own data | Docker network only |
-| MongoDB (Atlas in cloud) | Persistent storage, one database per service | Services via `MONGO_URI` |
+```
+Client / Postman ──► localhost:30080 (NodePort) ──► api-gateway Service ──► api-gateway Pod
+                                                         │  http://user-service:3001 / product-service:3002 / order-service:3003
+                                                         ▼
+                                    user-service (×3) · product-service · order-service  ──►  MongoDB Atlas
+Prometheus (namespace monitoring) ── scrapes /metrics of every pod in lab8 ──► Grafana dashboard
+```
 
 ## Project Structure
 ```
-Lab-7/
-├── api-gateway/          NEW  server.js, Dockerfile, package.json, .env.example
-├── user-service/         unchanged from Lab 6
-├── product-service/      unchanged from Lab 6
-├── order-service/        unchanged from Lab 6
-├── compose.yaml          gateway added; service ports removed
-├── .env                  service registry (locations, ports, timeouts – no secrets)
-├── render.yaml           Render Blueprint for the cloud deployment
-├── architecture.svg
+Lab-8/
+├── api-gateway/ user-service/ product-service/ order-service/   (+ /metrics, + test/)
+├── k8s/
+│   ├── configmap.yaml
+│   ├── gateway-deployment.yaml   gateway-service.yaml     (NodePort 30080)
+│   ├── user-deployment.yaml      user-service.yaml        (ClusterIP 3001)
+│   ├── product-deployment.yaml   product-service.yaml     (ClusterIP 3002)
+│   ├── order-deployment.yaml     order-service.yaml       (ClusterIP 3003)
+│   └── monitoring/
+│       ├── prometheus.yaml       namespace, RBAC, config, Deployment, Service
+│       └── grafana.yaml          data source + dashboard provisioning, Deployment, Service
+├── (CI workflow: ../.github/workflows/ci.yml at the repository root)
+├── kind-config.yaml              local cluster definition (maps NodePort 30080 → localhost)
+├── compose.yaml / render.yaml    Lab 7 (unchanged)
 └── API-Gateway-Lab7.postman_collection.json
 ```
 
-## Gateway Endpoints
-| Gateway path | Routed to | Example |
-|---|---|---|
-| GET `/users`, `/users/{id}` | User Service | GET /users/101 |
-| POST `/users`, PUT/DELETE `/users/{id}` | User Service | POST /users |
-| GET `/products`, `/products/{id}` | Product Service | GET /products/501 |
-| POST `/products`, PUT/DELETE `/products/{id}` | Product Service | POST /products |
-| POST `/orders`, GET `/orders`, GET `/orders/{id}` | Order Service | POST /orders |
-| GET `/health` | Gateway itself (not proxied) | `{"service":"api-gateway","status":"UP",...}` |
-| anything else | Gateway itself | 404 `{"error":"No route for GET /x"}` |
-
-The gateway forwards the path unchanged (`/users/101` → `http://user-service:3001/users/101`), so every response and status code is exactly what the service returns.
-
-## Run Locally
-```bash
-docker compose up -d --build
-docker compose ps          # only api-gateway shows a host port (0.0.0.0:8000->8000)
-curl http://localhost:8000/health
-docker compose logs -f api-gateway
-```
-Gateway port is `8000` (`GATEWAY_PORT` in `.env`; 8080 was already taken on the dev machine).
-
----
-
-## Part A – API Gateway
-
-**Routing.** `api-gateway/server.js` holds a registry of `{prefix, name, url}` and creates one proxy per entry. A request matches a service when its path is the prefix or starts with `prefix/`. The gateway has **no business logic** and does not parse bodies – it streams requests through.
-
-**Health check.** `GET /health` → `200 {"service":"api-gateway","status":"UP","uptimeSeconds":4,"routes":{"/users":"user-service",...}}`. It only exposes route→service names, not internal URLs.
-
-**Request logging** (method, path, target service, status, time):
-```
-[api-gateway] POST /orders -> order-service 201 155ms
-[api-gateway] GET /orders/901 -> order-service 200 11ms
-[api-gateway] product-service error: ENOTFOUND
-[api-gateway] GET /products -> product-service 503 3619ms
-```
-
-**Centralized error handling.**
-| Situation | Gateway response |
+## Prerequisites & Kubernetes environment
+| Tool | Version used |
 |---|---|
-| Service stopped / DNS fails / connection refused (`ECONNREFUSED`, `ENOTFOUND`, `EAI_AGAIN`, `EHOSTUNREACH`) | **503** `{"error":"product-service is unavailable. Please try again later."}` |
-| Connection reset or no answer within `PROXY_TIMEOUT_MS` | **502** `{"error":"Bad gateway: product-service failed to respond (ECONNRESET)"}` |
-| Unknown path | **404** from the gateway |
-| Service answers (any status) | passed through unchanged |
+| Docker Desktop | 29.6.1 |
+| kind (Kubernetes in Docker) | v0.30.0 → Kubernetes v1.34.0, 1 control-plane node |
+| kubectl | v1.36.1 |
+| Node.js | 22 |
 
-**Only the gateway is exposed.** In `compose.yaml` the three services and three databases have no `ports:`; only `api-gateway` publishes `8000:8000`. Verified:
-```
-localhost:3001 -> unreachable
-localhost:3002 -> unreachable
-localhost:3003 -> unreachable
-localhost:8000/health -> 200
-```
+**Selected environment: kind**, a single-node local cluster running inside Docker. `kind-config.yaml` maps the gateway's NodePort `30080` to `localhost:30080`, so Postman reaches the gateway without port-forwarding.
 
-### Discussion: Why an API Gateway instead of direct client → service calls?
-- **Single entry point** – clients know one URL instead of three hosts/ports; adding or splitting a service does not change the client.
-- **Hides internal structure** – services, ports and databases stay on the private network; only the gateway is attack surface. Services can be moved, renamed or scaled without clients noticing.
-- **Centralized cross-cutting concerns** – logging, error translation (clean 502/503 instead of hangs), and later auth, rate limiting, CORS and TLS are implemented once, not copied into every service.
-- **Trade-off** – it is one more hop and a potential single point of failure, so in production it is replicated and kept free of business logic.
-
----
-
-## Part B – Service Discovery (Configuration-Based)
-
-**Registry.** Service locations live only in configuration:
-
-| Variable | Local (`.env`) | Cloud (Render env vars) |
-|---|---|---|
-| `USER_SERVICE_URL` | `http://user-service:3001` | `https://campusconnect-user-service.onrender.com` |
-| `PRODUCT_SERVICE_URL` | `http://product-service:3002` | `https://campusconnect-product-service.onrender.com` |
-| `ORDER_SERVICE_URL` | `http://order-service:3003` | `https://campusconnect-order-service.onrender.com` |
-
-The gateway reads them at startup, **refuses to start if one is missing** (no hidden hard-coded fallback), builds its routing table from them and prints it:
-```
-[api-gateway] /users/* -> user-service @ http://user-service:3001
-[api-gateway] /products/* -> product-service @ http://product-service:3002
-[api-gateway] /orders/* -> order-service @ http://order-service:3003
-```
-Order Service reads the same `USER_SERVICE_URL` / `PRODUCT_SERVICE_URL`, so one registry serves both callers.
-
-**Proof – relocate User Service with configuration only.** Change in `.env` (or the shell):
-```
-USER_SERVICE_PORT=4001
-USER_SERVICE_URL=http://user-service:4001
-```
+## 1. Cluster & context
 ```bash
-docker compose up -d        # recreates user-service, order-service, api-gateway – no rebuild, no code change
+kind create cluster --config kind-config.yaml     # creates cluster "lab8", context "kind-lab8"
+kubectl config current-context                    # kind-lab8
+kubectl get nodes                                 # lab8-control-plane   Ready   control-plane
+kubectl create namespace lab8
+kubectl config set-context --current --namespace=lab8   # optional: make lab8 the default
 ```
-Result observed:
-```
-user-service  | [user-service] running on port 4001
-api-gateway   | [api-gateway] /users/* -> user-service @ http://user-service:4001
-GET  /users  via gateway                   [200]
-POST /orders (order → user-service:4001)   [201]
-```
-Revert the two lines and `docker compose up -d` again.
 
-### Static (config) vs dynamic service discovery
-| | Static config (this lab) | Dynamic registry (Consul, Eureka, Kubernetes DNS/Services) |
-|---|---|---|
-| Where locations come from | `.env` / platform env vars, read once at startup | Services register themselves; clients query the registry at runtime |
-| Location changes | Edit config + restart the gateway | Picked up automatically, no restart |
-| Multiple instances | One URL per service | Many instances per service + client- or server-side load balancing |
-| Health awareness | None – a dead URL stays in the table until someone edits it | Health checks remove failed instances from the pool |
-| Scaling / auto-healing | Manual | New/replaced containers are discovered as they come up |
-| Complexity | Very low – fine for a fixed set of services | Extra infrastructure to run and secure |
-
-A dynamic registry adds what a static file cannot: **runtime registration, health-based removal, multiple instances with load balancing, and zero-restart updates**. Compose's and Render's DNS names already give a small taste of this (the name stays fixed while the container IP changes).
-
----
-
-## Part C – Cloud Deployment (Render + MongoDB Atlas)
-
-**Platform:** Render, free plan, Docker runtime, defined as code in `render.yaml` (Blueprint). **Database:** MongoDB Atlas (already used since Lab 4).
-
-### 1. MongoDB Atlas
-1. Atlas → your cluster → **Database Access**: user with read/write.
-2. **Network Access** → add `0.0.0.0/0` (Render free services have no static outbound IP).
-3. Copy the connection string three times, changing only the database name – one database per service:
-   ```
-   mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/userdb?retryWrites=true&w=majority
-   mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/productdb?retryWrites=true&w=majority
-   mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/orderdb?retryWrites=true&w=majority
-   ```
-
-### 2. Push to GitHub
-Push the **contents of `Lab-7/`** as the root of a GitHub repo (`render.yaml` must be at the repo root).
+## 2. Images
+Images use **versioned tags** (`:v2` = Lab 7 code + metrics). kind nodes cannot see the host's Docker images, so they are loaded into the node. `imagePullPolicy: IfNotPresent` makes Kubernetes use the loaded images.
 ```bash
-cd Lab-7
-git init && git add . && git commit -m "Lab 7: API gateway + Render blueprint"
-git branch -M main && git remote add origin https://github.com/<you>/campusconnect-lab7.git && git push -u origin main
+for s in api-gateway user-service product-service order-service; do
+  docker build -t $s:v2 ./$s
+  kind load docker-image $s:v2 --name lab8
+done
 ```
 
-### 3. Deploy the Blueprint
-Render Dashboard → **New → Blueprint** → select the repo. Render reads `render.yaml` and creates four Docker web services. Because every location/secret is `sync: false`, it asks for the values:
+## 3. Configuration
+| Object | Name | Keys | Used by |
+|---|---|---|---|
+| ConfigMap | `campusconnect-config` | `USER_SERVICE_URL`, `PRODUCT_SERVICE_URL`, `ORDER_SERVICE_URL`, `PROXY_TIMEOUT_MS`, `REQUEST_TIMEOUT_MS` | gateway, order-service (`envFrom`) |
+| Secret | `mongo-secret` | `USER_MONGO_URI`, `PRODUCT_MONGO_URI`, `ORDER_MONGO_URI` | user / product / order (`secretKeyRef` → `MONGO_URI`) |
+| Deployment env | – | `PORT` | each container |
 
-| Service | Variable | Value |
-|---|---|---|
-| campusconnect-user-service | `MONGO_URI` | Atlas …/`userdb` |
-| campusconnect-product-service | `MONGO_URI` | Atlas …/`productdb` |
-| campusconnect-order-service | `MONGO_URI` | Atlas …/`orderdb` |
-| campusconnect-order-service | `USER_SERVICE_URL` / `PRODUCT_SERVICE_URL` | the user / product service public URLs |
-| campusconnect-gateway | `USER_SERVICE_URL` / `PRODUCT_SERVICE_URL` / `ORDER_SERVICE_URL` | the three service public URLs |
+Service URLs are **Kubernetes Service names** (`http://user-service:3001`), resolved by cluster DNS, so they stay valid when Pods are replaced or scaled. Pod IPs are never used.
 
-Service URLs follow `https://<service-name>.onrender.com`. If Render added a suffix because a name was taken, copy the real URL from each service page, fix it under **Environment**, and **Save, rebuild and deploy** the gateway / order service. `PROXY_TIMEOUT_MS=90000` and `REQUEST_TIMEOUT_MS=60000` are set in `render.yaml` so a sleeping free service has time to wake up.
-
-### 4. Verify
+The Secret is **not in the repository**. Create it from your Atlas connection strings:
 ```bash
-curl https://campusconnect-gateway.onrender.com/health
+kubectl create secret generic mongo-secret -n lab8 \
+  --from-literal=USER_MONGO_URI='mongodb+srv://<user>:<pass>@<cluster>/userdb?retryWrites=true&w=majority' \
+  --from-literal=PRODUCT_MONGO_URI='mongodb+srv://<user>:<pass>@<cluster>/productdb?retryWrites=true&w=majority' \
+  --from-literal=ORDER_MONGO_URI='mongodb+srv://<user>:<pass>@<cluster>/orderdb?retryWrites=true&w=majority'
 ```
-Then in Postman set the collection variable `gateway` to the public URL and run folders **0–3**. The first request after idle can take ~1 minute (cold start); later ones are fast.
+Atlas → Network Access must allow your public IP (or `0.0.0.0/0`), because the kind node reaches Atlas through your machine's internet connection.
 
-### What was deployed & limitations
-- **Deployed:** gateway + all three services (4 Docker containers) + Atlas – the full chain gateway → services → MongoDB Atlas.
-- **Internal services are public on Render free.** Render's free web services *cannot receive private-network traffic* and private services (`type: pserv`) are paid-only, so the gateway and order-service call the services over their public `onrender.com` URLs. Locally the Docker network boundary is enforced; in the cloud it is not. On a paid plan: change the three services to `type: pserv` and set the URLs with `fromService: { name: ..., property: hostport }` – a config change only, gateway code unchanged.
-- **Cold starts:** free services sleep after 15 min idle and take ~1 min to wake.
-- **Free hours:** 750 instance-hours/month shared by all free services in the workspace.
+To change the Secret later: delete it, create it again, then run `kubectl rollout restart deployment -n lab8`.
 
-### Unreachable-service test in the cloud
-Set the gateway's `PRODUCT_SERVICE_URL` to a host that does not exist (e.g. `https://campusconnect-missing.invalid`), save & deploy, run *4. Unreachable Service → DOWN (503)*, then restore the real URL and run *After Restart (200)*. (Alternatively suspend the product service from its Settings page.)
+## 4. Deploy & verify
+```bash
+kubectl apply -f k8s/ -n lab8
+kubectl get deployments -n lab8
+kubectl get pods -n lab8 -o wide
+kubectl get services -n lab8
+kubectl get endpoints -n lab8
+```
+<!-- RESULTS:DEPLOY -->
 
----
+## 5. Access & test the gateway
+The gateway is the **only** externally exposed Service (`type: NodePort`, `nodePort: 30080`); the three services are `ClusterIP` and can only be reached inside the cluster.
+```bash
+curl http://localhost:30080/health
+curl http://localhost:30080/users
+```
+**Postman:** import `API-Gateway-Lab7.postman_collection.json` and set the collection variable `gateway` to `http://localhost:30080`. Run folders 0–3.
 
-## Postman
-Import `API-Gateway-Lab7.postman_collection.json` ("API Gateway – Lab 7"). One variable, `gateway` (default `http://localhost:8000`) – every request goes through the gateway.
+CLI equivalent:
+```bash
+npx newman run API-Gateway-Lab7.postman_collection.json --env-var gateway=http://localhost:30080 \
+  --folder "0. Gateway" --folder "1. /users → User Service" --folder "2. /products → Product Service" \
+  --folder "3. /orders → Order Service (Order → User / Product)"
+```
+<!-- RESULTS:GATEWAY -->
 
-| Folder | Tests |
+## 6. Scaling
+```bash
+kubectl scale deployment user-service --replicas=3 -n lab8
+kubectl get pods -n lab8 -l app=user-service -o wide
+kubectl get endpoints user-service -n lab8      # 3 pod IPs behind one stable Service
+```
+<!-- RESULTS:SCALE -->
+
+## 7. Self-healing
+```bash
+kubectl get pods -n lab8 -l app=user-service
+kubectl delete pod <user-service-pod-name> -n lab8
+kubectl get pods -n lab8 -l app=user-service -w     # a replacement is created at once
+```
+<!-- RESULTS:HEAL -->
+
+## 8. GitHub Actions CI
+`.github/workflows/ci.yml` at the **repository root** (GitHub only runs workflows from there). It runs only when `Lab-8/**` or the workflow changes, and each job works in `Lab-8/<service>`:
+
+| Setting | Value |
 |---|---|
-| 0. Gateway | `GET /health` 200 + `status: UP`; unknown route 404 |
-| 1. /users → User Service | create 201, list/get/update 200, invalid 404 |
-| 2. /products → Product Service | create 201, list/get/update 200, invalid 404 |
-| 3. /orders → Order Service | create 201 (Order→User/Product), list/get 200, invalid user/product 404 |
-| 4. Unreachable Service | run `docker compose stop product-service` → 503; `docker compose start product-service` → 200 |
+| Triggers | `push`, `pull_request` |
+| Runner | `ubuntu-latest` |
+| Matrix | `api-gateway`, `user-service`, `product-service`, `order-service` (one job each, `fail-fast: false`) |
+| Steps | `actions/checkout@v4` → `actions/setup-node@v4` (Node 22, npm cache) → `npm ci` → `npm test` → `docker build -t <service>:<commit-sha> .` |
 
-Local result (Newman, folders 0–3): **17 requests, 20 assertions, 0 failures.** Folder 4: stopped product-service → `503 {"error":"product-service is unavailable. Please try again later."}`, restarted → `200`.
+The tests need no database or network: each one starts the real `server.js` with the backends pointed at a closed port, then checks the routes that do not touch MongoDB (4 tests per service, 16 in total). Run them locally with `npm test` inside any service folder.
 
-CLI equivalent: `npx newman run API-Gateway-Lab7.postman_collection.json --env-var gateway=https://<your-gateway>.onrender.com --folder "0. Gateway" --folder "1. /users → User Service" --folder "2. /products → Product Service" --folder "3. /orders → Order Service (Order → User / Product)"`
+To show a second CI run, make a small change (for example, edit this README), commit it and push. A new run appears under **Actions**.
 
-### Evidence to capture
-- [ ] Postman: folders 0–3 against `http://localhost:8000`
-- [ ] Postman: folder 4 (503 while stopped, 200 after restart) + `docker compose logs api-gateway`
-- [ ] `docker compose ps` showing only the gateway port published
-- [ ] Config-change proof: `.env` diff + gateway startup log with the new URL
-- [ ] Render dashboard: four services "Live", gateway Environment tab, deploy logs
-- [ ] Postman: folders 0–3 against the public gateway URL
+## 9. Prometheus
+```bash
+kubectl apply -f k8s/monitoring/
+kubectl port-forward -n monitoring svc/prometheus 9090:9090     # http://localhost:9090
+```
+**Targets.** Prometheus uses Kubernetes pod discovery (`role: pod`, namespace `lab8`) and keeps only Pods annotated `prometheus.io/scrape: "true"`. All four Deployments carry that annotation. It adds the labels `service` (from the pod's `app` label) and `pod`. The scrape interval is 5 s. Its ServiceAccount can only `get/list/watch` Pods in `lab8` (a Role, not cluster-wide).
+Status → Targets shows job `campusconnect` with one target per pod (6 after scaling: gateway, 3× user, product, order).
 
-## Troubleshooting
-| Issue | Fix |
+**Metrics exposed by every service**
+| Metric | Type | Labels | Question |
+|---|---|---|---|
+| `up` | (Prometheus) | `service`, `pod` | Is the target reachable? |
+| `http_requests_total` | counter | `method`, `status` (+ `target` on the gateway) | How much traffic? How many errors? |
+| `http_request_duration_seconds` | histogram | same | How long do requests take? |
+| `process_*`, `nodejs_*` | defaults | – | CPU, memory, event-loop lag |
+
+**Useful queries**
+```promql
+up
+sum by (service) (up)
+rate(http_requests_total[5m])
+sum by (target) (rate(http_requests_total{service="api-gateway"}[1m]))
+sum by (target, status) (rate(http_requests_total{service="api-gateway", status=~"4..|5.."}[1m]))
+histogram_quantile(0.95, sum by (le, target) (rate(http_request_duration_seconds_bucket{service="api-gateway"}[1m])))
+sum by (pod) (rate(http_requests_total{service="user-service"}[1m]))
+```
+<!-- RESULTS:PROM -->
+
+## 10. Grafana
+```bash
+kubectl port-forward -n monitoring svc/grafana 3000:3000        # http://localhost:3000
+```
+The Prometheus data source and the dashboard **"Lab 8 - CampusConnect"** are provisioned from ConfigMaps, so nothing has to be clicked together. The dashboard is also Grafana's home page. Anonymous visitors get read-only access; to edit, log in as `admin` (Grafana's default password, which you must change on first login – no password is stored in the repo).
+
+| Panel | Monitoring question | PromQL |
+|---|---|---|
+| Pods UP per service (stat) | Are targets reachable? | `sum by (service) (up{job="campusconnect"})` |
+| Gateway req/s by target | How much traffic is arriving? | `sum by (target) (rate(http_requests_total{service="api-gateway"}[1m]))` |
+| Gateway 4xx/5xx req/s | Are failures increasing? | `sum by (target, status) (rate(http_requests_total{service="api-gateway",status=~"4..\|5.."}[1m]))` |
+| Gateway p95 latency | How long are requests taking? | `histogram_quantile(0.95, sum by (le, target) (rate(http_request_duration_seconds_bucket{service="api-gateway"}[1m])))` |
+| User Service req/s per pod | Is load spread across the 3 replicas? | `sum by (pod) (rate(http_requests_total{service="user-service"}[1m]))` |
+
+## 11. Generate traffic & observe
+```bash
+# normal traffic: 200 requests through the gateway
+for i in $(seq 1 50); do for p in users products orders health; do curl -s -o /dev/null localhost:30080/$p; done; done
+# controlled failure experiment: 404s from invalid IDs and unknown routes, then a 503 from a stopped service
+for i in $(seq 1 30); do curl -s -o /dev/null localhost:30080/users/99999; curl -s -o /dev/null localhost:30080/nope; done
+kubectl scale deployment product-service --replicas=0 -n lab8
+for i in $(seq 1 20); do curl -s -o /dev/null localhost:30080/products; done      # 503 product-service is unavailable
+kubectl scale deployment product-service --replicas=1 -n lab8
+```
+Running the Postman collection with Newman's `-n 10` flag also generates steady traffic.
+<!-- RESULTS:TRAFFIC -->
+
+## 12. Troubleshooting
+```bash
+kubectl describe pod <pod> -n lab8        # events: image pull, probe failures, missing Secret/ConfigMap
+kubectl logs <pod> -n lab8                # application log (gateway logs every request with its target)
+kubectl logs deploy/api-gateway -n lab8 -f
+kubectl get endpoints -n lab8             # empty endpoints = selector mismatch or pods not Ready
+kubectl get events -n lab8 --sort-by=.lastTimestamp
+```
+| Symptom | Cause / fix |
 |---|---|
-| Gateway exits: `Missing service URL config for: ...` | a `*_SERVICE_URL` is not set in `.env` / Render Environment |
-| `503 ... is unavailable` | target container stopped or wrong host in the URL (`ENOTFOUND`) – check `docker compose ps` / the URL |
-| `502 Bad gateway ... ECONNRESET` | service crashed mid-request or exceeded `PROXY_TIMEOUT_MS` – check that service's logs |
-| `localhost:3001` no longer works | intended – services are internal; use `localhost:8000/users` |
-| `port is already allocated` on 8000 | change `GATEWAY_PORT` in `.env` |
-| POST body empty at the service | don't add `express.json()` to the gateway – it would consume the body before proxying |
-| Render: first request very slow / times out | cold start – wait ~1 min and retry |
-| Render: `MongoServerSelectionError` | Atlas Network Access missing `0.0.0.0/0`, or wrong password in `MONGO_URI` |
-| Render: gateway 404 HTML from `onrender.com` | wrong service URL (Render added a suffix) – copy the real one into Environment |
-| stale code locally | `docker compose up -d --build` |
+| `ErrImagePull` / `ImagePullBackOff` for `*:v2` | image not loaded into kind → `kind load docker-image <svc>:v2 --name lab8` |
+| `CreateContainerConfigError` | `mongo-secret` missing or a key misspelled → create the Secret (section 3) |
+| Pod `Running` but `0/1 READY` | readiness probe failing → `kubectl describe pod` for the probe error, `kubectl logs` for the app error |
+| Gateway 503 `... is unavailable` | target Service has no ready endpoints → `kubectl get endpoints` |
+| Gateway 502 / requests hang with Atlas | Atlas Network Access does not allow your IP, or wrong password → check the service log for `MongoDB connection error` |
+| `localhost:30080` refused | cluster was not created with `kind-config.yaml` (no port mapping) → `kubectl port-forward svc/api-gateway 8000:8000 -n lab8` instead |
+| Prometheus target list empty | pods lack the `prometheus.io/scrape` annotation, or `k8s/monitoring/` was applied before `lab8` existed (the Role lives in `lab8`) → re-apply |
+<!-- RESULTS:TROUBLE -->
 
-## Reflection
-In Lab 6 a client had to know three ports and talk to each service directly, so the internal layout leaked straight into Postman and any frontend. The gateway collapses that into one address: clients now see `/users`, `/products` and `/orders` and nothing about where those live. Operationally, logging and failure handling moved to one place – one log shows every request with its target and status, and a dead service now yields an immediate, readable 503 instead of a connection error at the client. Moving service locations into configuration meant the same code runs unmodified on Docker Compose and on Render; only environment variables differ, which I proved by moving User Service to another port without touching code. Deploying to the cloud turned "works on my machine" into a system anyone can call over the internet, but it also surfaced real-world concerns Lab 6 never had: cold starts, timeouts sized for sleeping services, free-tier networking limits, and managing secrets through a dashboard instead of a local file.
+## Evidence checklist
+| # | Evidence | How |
+|---|---|---|
+| 1 | Lab 7 baseline | Postman against `http://localhost:8000` (`docker compose up -d` in Lab-7) |
+| 2 | Kubernetes environment | `kubectl config current-context`, `kubectl get nodes` |
+| 3 | Manifests | files in `k8s/` |
+| 4 | Deployment | `kubectl get deployments,pods,services -n lab8` |
+| 5 | Gateway test | Postman against `http://localhost:30080` |
+| 6 | Scaling | `kubectl get pods -l app=user-service` after scaling to 3 |
+| 7 | Self-healing | `kubectl delete pod` + `kubectl get pods -w` |
+| 8 | Troubleshooting | `kubectl describe` / `logs` / `get endpoints` |
+| 9 | GitHub Actions | Actions tab → successful `CI` run (4 green matrix jobs) |
+| 10 | Prometheus | Status → Targets (all UP) + a query graph |
+| 11 | Grafana | "Lab 8 - CampusConnect" dashboard |
+| 12 | Traffic | dashboard after running section 11 |
+| 13 | Architecture | `architecture.svg` |
+
+## Cleanup
+```bash
+kind delete cluster --name lab8
+```
