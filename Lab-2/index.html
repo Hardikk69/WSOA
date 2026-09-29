@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>CampusConnect - Lab 2 REST API</title>
+
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+
+    <!-- Navigation Bar -->
+    <header>
+        <h1>CampusConnect Portal</h1>
+
+        <ul class="nav-links">
+            <li><a href="#welcome">Home</a></li>
+            <li><a href="#profile">Profile</a></li>
+            <li><a href="#timetable">Timetable</a></li>
+            <li><a href="#announcements">Announcements</a></li>
+            <li><a href="#assignments">Assignments</a></li>
+            <li><a href="#services">Services</a></li>
+            <li>
+                <button id="theme-btn">Switch to Dark Mode</button>
+            </li>
+        </ul>
+    </header>
+
+    <main>
+
+        <!-- Welcome Section -->
+        <section class="welcome-section" id="welcome">
+            <div>
+                <h2 id="greeting-text">Welcome, Student!</h2>
+
+                <p>
+                    Student ID: 202512036 |
+                    Department: MSCIT |
+                    Semester: 3
+                </p>
+            </div>
+
+            <div>
+                <p>
+                    Live Time:
+                    <span id="live-time">00:00:00 AM</span>
+                </p>
+            </div>
+        </section>
+
+
+        <!-- Student Profile API Section -->
+        <section class="api-section" id="profile">
+
+            <div class="section-heading">
+                <div>
+                    <h2>Student Profile</h2>
+                    <p class="api-label">JSONPlaceholder Users API</p>
+                </div>
+            </div>
+
+            <div id="profile-content" class="profile-card">
+                <p class="loading">Loading student profile...</p>
+            </div>
+
+        </section>
+
+
+        <!-- Academic Summary -->
+        <section class="summary-grid">
+
+            <div class="summary-card">
+                <h3>Attendance</h3>
+                <p>100%</p>
+            </div>
+
+            <div class="summary-card">
+                <h3>Courses</h3>
+                <p>5</p>
+            </div>
+
+            <div class="summary-card">
+                <h3>Assignments</h3>
+                <p id="assignment-summary">Loading...</p>
+            </div>
+
+            <div class="summary-card">
+                <h3>Exams</h3>
+                <p>4</p>
+            </div>
+
+            <div class="summary-card">
+                <h3>CGPA</h3>
+                <p>8.92</p>
+            </div>
+
+        </section>
+
+
+        <!-- Timetable and Announcements -->
+        <div class="content-columns">
+
+            <!-- Daily Timetable -->
+            <section class="column" id="timetable">
+
+                <h2>Today's Timetable</h2>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Subject</th>
+                            <th>Room No</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        <tr>
+                            <td>09:00 AM - 10:00 AM</td>
+                            <td>Web Services &amp; SOA Lecture</td>
+                            <td>Room 209</td>
+                        </tr>
+
+                        <tr>
+                            <td>11:00 AM - 12:00 PM</td>
+                            <td>Web Services Lab</td>
+                            <td>Lab 5-6</td>
+                        </tr>
+
+                        <tr>
+                            <td>02:00 PM - 03:00 PM</td>
+                            <td>Software Engineering</td>
+                            <td>Room 207</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+            </section>
+
+
+            <!-- Announcements API Section -->
+            <section class="column" id="announcements">
+
+                <div class="section-heading">
+                    <div>
+                        <h2>Recent Announcements</h2>
+                        <p class="api-label">JSONPlaceholder Posts API</p>
+                    </div>
+                </div>
+
+                <!-- Announcement Search -->
+                <div class="api-controls">
+
+                    <label for="announcement-search">
+                        Search Announcements:
+                    </label>
+
+                    <input
+                        type="text"
+                        id="announcement-search"
+                        placeholder="Search by title..."
+                    >
+
+                </div>
+
+                <p class="instruction">
+                    Click an announcement title to read the details.
+                </p>
+
+                <div id="announcements-container">
+
+                    <p class="loading">
+                        Loading announcements...
+                    </p>
+
+                </div>
+
+            </section>
+
+        </div>
+
+
+        <!-- Assignments API Section -->
+        <section class="api-section" id="assignments">
+
+            <div class="section-heading">
+
+                <div>
+                    <h2>Assignments</h2>
+                    <p class="api-label">JSONPlaceholder Todos API</p>
+                </div>
+
+            </div>
+
+
+            <!-- Assignment Controls -->
+            <div class="assignment-controls">
+
+                <label for="assignment-filter">
+                    Filter:
+                </label>
+
+                <select id="assignment-filter">
+
+                    <option value="all">
+                        All Assignments
+                    </option>
+
+                    <option value="completed">
+                        Completed
+                    </option>
+
+                    <option value="pending">
+                        Pending
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div id="assignments-container">
+
+                <p class="loading">
+                    Loading assignments...
+                </p>
+
+            </div>
+
+        </section>
+
+
+        <!-- Refresh API Data -->
+        <section class="refresh-section">
+
+            <button id="refresh-btn">
+                Refresh API Data
+            </button>
+
+            <p id="refresh-status">
+                Data is loaded from JSONPlaceholder.
+            </p>
+
+        </section>
+
+
+        <!-- Quick Services -->
+        <section class="services-section" id="services">
+
+            <h2>Quick Services</h2>
+
+            <div class="search-container">
+
+                <label for="service-search">
+                    Search Services:
+                </label>
+
+                <input
+                    type="text"
+                    id="service-search"
+                    placeholder="Type name here..."
+                >
+
+            </div>
+
+
+            <div class="services-list">
+
+                <div class="service-item">
+                    Attendance Check
+                </div>
+
+                <div class="service-item">
+                    Registration
+                </div>
+
+                <div class="service-item">
+                    Fee Payment
+                </div>
+
+                <div class="service-item">
+                    Transcript Request
+                </div>
+
+                <div class="service-item">
+                    Library Search
+                </div>
+
+                <div class="service-item">
+                    Timetable Overview
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+
+    <!-- Footer -->
+    <footer>
+
+        <p>
+            CampusConnect Portal - Web Services &amp; SOA Laboratory Lab 2
+        </p>
+
+        <p>
+            <a
+                href="#"
+                onclick="alert('Help Desk: helpdesk@university.edu | Phone: +1 555-0199'); return false;"
+            >
+                Contact Help Desk
+            </a>
+
+            |
+
+            <a
+                href="#"
+                onclick="alert('Lab 2 uses JSONPlaceholder practice API data.'); return false;"
+            >
+                Privacy Policy
+            </a>
+        </p>
+
+    </footer>
+
+
+    <script src="js/script.js"></script>
+
+</body>
+
+</html>
