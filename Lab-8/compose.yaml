@@ -1,0 +1,106 @@
+name: campusconnect
+
+services:
+  # ---------- API Gateway: the ONLY container with a host port ----------
+  api-gateway:
+    build: ./api-gateway
+    image: api-gateway:v1
+    container_name: api-gateway
+    ports:
+      - "${GATEWAY_PORT:-8000}:8000"
+    environment:
+      PORT: 8000
+      # Service registry - locations come from .env, not from gateway code
+      USER_SERVICE_URL: ${USER_SERVICE_URL}
+      PRODUCT_SERVICE_URL: ${PRODUCT_SERVICE_URL}
+      ORDER_SERVICE_URL: ${ORDER_SERVICE_URL}
+      PROXY_TIMEOUT_MS: ${PROXY_TIMEOUT_MS:-10000}
+    depends_on:
+      - user-service
+      - product-service
+      - order-service
+    networks:
+      - campus-network
+    restart: unless-stopped
+
+  # ---------- User Service + its own database (internal only) ----------
+  user-service:
+    build: ./user-service
+    image: user-service:v1
+    container_name: user-service
+    environment:
+      PORT: ${USER_SERVICE_PORT:-3001}
+      MONGO_URI: ${USER_MONGO_URI:-mongodb://user-db:27017/userdb}
+    depends_on:
+      - user-db
+    networks:
+      - campus-network
+    restart: unless-stopped
+
+  user-db:
+    image: mongo:7
+    container_name: user-db
+    volumes:
+      - user-db-data:/data/db
+    networks:
+      - campus-network
+
+  # ---------- Product Service + its own database (internal only) ----------
+  product-service:
+    build: ./product-service
+    image: product-service:v1
+    container_name: product-service
+    environment:
+      PORT: ${PRODUCT_SERVICE_PORT:-3002}
+      MONGO_URI: ${PRODUCT_MONGO_URI:-mongodb://product-db:27017/productdb}
+    depends_on:
+      - product-db
+    networks:
+      - campus-network
+    restart: unless-stopped
+
+  product-db:
+    image: mongo:7
+    container_name: product-db
+    volumes:
+      - product-db-data:/data/db
+    networks:
+      - campus-network
+
+  # ---------- Order Service + its own database (internal only) ----------
+  order-service:
+    build: ./order-service
+    image: order-service:v1
+    container_name: order-service
+    environment:
+      PORT: ${ORDER_SERVICE_PORT:-3003}
+      MONGO_URI: ${ORDER_MONGO_URI:-mongodb://order-db:27017/orderdb}
+      USER_SERVICE_URL: ${USER_SERVICE_URL}
+      PRODUCT_SERVICE_URL: ${PRODUCT_SERVICE_URL}
+      REQUEST_TIMEOUT_MS: ${REQUEST_TIMEOUT_MS:-3000}
+    depends_on:
+      - order-db
+      - user-service
+      - product-service
+    networks:
+      - campus-network
+    restart: unless-stopped
+
+  order-db:
+    image: mongo:7
+    container_name: order-db
+    volumes:
+      - order-db-data:/data/db
+    networks:
+      - campus-network
+
+# No ports on services or databases: reachable only inside campus-network.
+networks:
+  campus-network:
+    name: campus-network
+    driver: bridge
+
+volumes:
+  user-db-data:
+  product-db-data:
+  order-db-data:
