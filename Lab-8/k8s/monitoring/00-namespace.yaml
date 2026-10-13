@@ -1,0 +1,5 @@
+# Created first (files apply in name order) so every other monitoring object has its namespace.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring

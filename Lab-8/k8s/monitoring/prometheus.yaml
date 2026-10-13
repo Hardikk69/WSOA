@@ -1,11 +1,6 @@
 # Prometheus: discovers every Pod in `lab8` annotated prometheus.io/scrape: "true"
 # and scrapes its /metrics endpoint. Apply with: kubectl apply -f k8s/monitoring/
 apiVersion: v1
-kind: Namespace
-metadata:
-  name: monitoring
----
-apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: prometheus
