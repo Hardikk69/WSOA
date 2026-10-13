@@ -4,13 +4,17 @@ const assert = require('node:assert');
 const { spawn } = require('node:child_process');
 
 const PORT = 4100;
-const DOWN = 'http://127.0.0.1:9';
+const DOWN = 'http://127.0.0.1:9';           // refuses connections at once
+const BLACKHOLE = 'http://10.255.255.1:3003';  // non-routable: connect attempts get no answer
 const url = (p) => `http://127.0.0.1:${PORT}${p}`;
 let server;
 
 before(() => new Promise((resolve, reject) => {
     server = spawn('node', ['server.js'], {
-        env: { ...process.env, PORT, USER_SERVICE_URL: DOWN, PRODUCT_SERVICE_URL: DOWN, ORDER_SERVICE_URL: DOWN }
+        env: {
+            ...process.env, PORT, USER_SERVICE_URL: DOWN, PRODUCT_SERVICE_URL: DOWN,
+            ORDER_SERVICE_URL: BLACKHOLE, PROXY_TIMEOUT_MS: 1000
+        }
     });
     server.stdout.on('data', (d) => d.toString().includes('running on port') && resolve());
     server.on('exit', (code) => reject(new Error(`server exited with ${code}`)));
@@ -37,6 +41,13 @@ test('unknown route returns 404', async () => {
 
 test('unreachable backend returns 503', async () => {
     assert.strictEqual((await fetch(url('/users'))).status, 503);
+});
+
+test('black-holed backend fails within PROXY_TIMEOUT_MS instead of hanging', async () => {
+    const start = Date.now();
+    const res = await fetch(url('/orders'));
+    assert.ok([502, 503].includes(res.status), `got ${res.status}`);
+    assert.ok(Date.now() - start < 3000, `took ${Date.now() - start}ms`);
 });
 
 test('GET /metrics exposes request counters', async () => {
