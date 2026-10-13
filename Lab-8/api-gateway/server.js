@@ -65,9 +65,12 @@ const UNREACHABLE = ['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'EHOSTUNREACH'];
 
 // proxyTimeout only starts once the TCP connection is up. An agent timeout also bounds the
 // connect phase, so a black-holed backend (e.g. a just-deleted Pod IP) can't hang a request for minutes.
+// keepAlive is off on purpose: a Kubernetes Service balances per connection, so one reused
+// connection would pin all traffic to a single replica and make scaling useless.
+// ponytail: new TCP connection per request; fine at lab traffic, revisit (or use a service mesh) at high RPS
 const agents = {
-    'http:': new http.Agent({ keepAlive: true, timeout: PROXY_TIMEOUT_MS }),
-    'https:': new https.Agent({ keepAlive: true, timeout: PROXY_TIMEOUT_MS })
+    'http:': new http.Agent({ keepAlive: false, timeout: PROXY_TIMEOUT_MS }),
+    'https:': new https.Agent({ keepAlive: false, timeout: PROXY_TIMEOUT_MS })
 };
 
 // Routing table is built from the registry, not from literal URLs
