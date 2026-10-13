@@ -1,4 +1,5 @@
 const express = require('express');
+const cors = require('cors');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const client = require('prom-client');
 require('dotenv').config();
@@ -43,6 +44,9 @@ app.use((req, res, next) => {
     });
     next();
 });
+
+// CORS at the edge so browser (React) clients can call the gateway; preflights are answered here
+app.use(cors());
 
 app.get('/metrics', async (req, res) => res.type(client.register.contentType).send(await client.register.metrics()));
 

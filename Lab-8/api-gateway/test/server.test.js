@@ -23,6 +23,14 @@ test('GET /health answers UP from the gateway itself', async () => {
     assert.strictEqual((await res.json()).status, 'UP');
 });
 
+test('CORS: browser preflight is answered by the gateway', async () => {
+    const res = await fetch(url('/users'), {
+        method: 'OPTIONS', headers: { Origin: 'http://localhost:5173', 'Access-Control-Request-Method': 'POST' }
+    });
+    assert.strictEqual(res.status, 204);
+    assert.strictEqual(res.headers.get('access-control-allow-origin'), '*');
+});
+
 test('unknown route returns 404', async () => {
     assert.strictEqual((await fetch(url('/nope'))).status, 404);
 });
