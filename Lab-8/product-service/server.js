@@ -29,9 +29,20 @@ app.use((req, res, next) => {
 app.get('/metrics', async (req, res) => res.type(client.register.contentType).send(await client.register.metrics()));
 
 // Product Service owns its own database (productdb). No other service connects to it.
-mongoose.connect(process.env.MONGO_URI)
+// Retry the first connection: Mongoose only auto-reconnects after an initial success,
+// and on Kubernetes the database (or DNS) may not be reachable yet when the pod starts.
+const connectDb = () => mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log(`[product-service] Connected to MongoDB database: ${mongoose.connection.name}`))
-    .catch((err) => console.error('[product-service] MongoDB connection error:', err.message));
+    .catch((err) => {
+        console.error('[product-service] MongoDB connection error:', err.message, '- retrying in 5s');
+        setTimeout(connectDb, 5000);
+    });
+connectDb();
+
+// Readiness: take traffic only once the database is connected (liveness stays on GET /)
+app.get('/ready', (req, res) => mongoose.connection.readyState === 1
+    ? res.json({ service: 'product-service', status: 'READY' })
+    : res.status(503).json({ service: 'product-service', status: 'NOT_READY', reason: 'database not connected' }));
 
 const validateProduct = ({ name, price, stock }) => {
     if (!name || name.trim() === '') return 'Name is required';

@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: order-service
-          image: order-service:v2
+          image: order-service:v3
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3003
@@ -36,7 +36,7 @@ spec:
             - configMapRef:
                 name: campusconnect-config
           readinessProbe:
-            httpGet: { path: /, port: 3003 }
+            httpGet: { path: /ready, port: 3003 }
             periodSeconds: 10
           livenessProbe:
             httpGet: { path: /, port: 3003 }
