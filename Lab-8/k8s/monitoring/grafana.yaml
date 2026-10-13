@@ -73,6 +73,24 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [{ "expr": "sum by (pod) (rate(http_requests_total{service=\"user-service\"}[1m]))", "legendFormat": "{{pod}}" }],
           "fieldConfig": { "defaults": { "unit": "reqps" } }
+        },
+        {
+          "type": "timeseries", "title": "Is every Deployment at its desired size? (available vs desired replicas)",
+          "gridPos": { "x": 0, "y": 21, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            { "expr": "kube_deployment_status_replicas_available{namespace=\"lab8\"}", "legendFormat": "{{deployment}} available" },
+            { "expr": "kube_deployment_spec_replicas{namespace=\"lab8\"}", "legendFormat": "{{deployment}} desired" }
+          ],
+          "fieldConfig": { "defaults": { "decimals": 0 } }
+        },
+        {
+          "type": "stat", "title": "Are pods crashing? (container restarts per Deployment)",
+          "gridPos": { "x": 12, "y": 21, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "sum by (deployment) (label_replace(kube_pod_container_status_restarts_total{namespace=\"lab8\"}, \"deployment\", \"$1\", \"pod\", \"(.*)-[^-]+-[^-]+\"))", "legendFormat": "{{deployment}}" }],
+          "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 5 } ] } } }
         }
       ]
     }
