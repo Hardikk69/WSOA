@@ -437,30 +437,11 @@
       ]
     },
     {
-      "name": "4. Unreachable Service (502/503)",
+      "name": "4. Gateway failure test – User Service (502/503 + recovery)",
+      "description": "1) all services up -> 200. 2) stop User Service (compose: docker compose stop user-service | k8s: kubectl scale deployment user-service --replicas=0 -n lab8) -> 502/503, no hang. 3) restart it (docker compose start user-service | kubectl scale ... --replicas=1) -> 200 again.",
       "item": [
         {
-          "name": "GET /products – Product Service DOWN (503)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status is 502 or 503\", () => pm.expect(pm.response.code).to.be.oneOf([502, 503]));",
-                  "pm.test(\"Clear JSON error\", () => pm.expect(pm.response.json().error).to.be.a(\"string\"));"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{gateway}}/products"
-          }
-        },
-        {
-          "name": "GET /products – After Restart (200)",
+          "name": "GET /users/{{userId}} – all services up (200)",
           "event": [
             {
               "listen": "test",
@@ -475,7 +456,47 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{gateway}}/products"
+            "url": "{{gateway}}/users/{{userId}}"
+          }
+        },
+        {
+          "name": "GET /users/{{userId}} – User Service DOWN (502/503)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 502 or 503\", () => pm.expect(pm.response.code).to.be.oneOf([502, 503]));",
+                  "pm.test(\"Clear JSON error\", () => pm.expect(pm.response.json().error).to.be.a(\"string\"));",
+                  "pm.test(\"Answers fast (no hang)\", () => pm.expect(pm.response.responseTime).to.be.below(5000));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{gateway}}/users/{{userId}}"
+          }
+        },
+        {
+          "name": "GET /users/{{userId}} – After restart (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{gateway}}/users/{{userId}}"
           }
         }
       ]
