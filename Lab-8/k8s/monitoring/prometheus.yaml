@@ -1,11 +1,6 @@
 # Prometheus: discovers every Pod in `lab8` annotated prometheus.io/scrape: "true"
 # and scrapes its /metrics endpoint. Apply with: kubectl apply -f k8s/monitoring/
 apiVersion: v1
-kind: Namespace
-metadata:
-  name: monitoring
----
-apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: prometheus
@@ -62,6 +57,10 @@ data:
             target_label: service
           - source_labels: [__meta_kubernetes_pod_name]
             target_label: pod
+      # Kubernetes workload health (desired/available replicas, restarts) for lab8
+      - job_name: kube-state-metrics
+        static_configs:
+          - targets: ["kube-state-metrics:8080"]
 ---
 apiVersion: apps/v1
 kind: Deployment

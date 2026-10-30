@@ -20,6 +20,12 @@ before(() => new Promise((resolve, reject) => {
 }));
 after(() => server.kill());
 
+test('GET /ready is 503 until the database is connected', async () => {
+    const res = await fetch(url('/ready'));
+    assert.strictEqual(res.status, 503);
+    assert.strictEqual((await res.json()).status, 'NOT_READY');
+});
+
 test('GET / reports UP', async () => {
     assert.strictEqual((await (await fetch(url('/'))).json()).status, 'UP');
 });

@@ -1,4 +1,7 @@
+const http = require('http');
+const https = require('https');
 const express = require('express');
+const cors = require('cors');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const client = require('prom-client');
 require('dotenv').config();
@@ -44,6 +47,9 @@ app.use((req, res, next) => {
     next();
 });
 
+// CORS at the edge so browser (React) clients can call the gateway; preflights are answered here
+app.use(cors());
+
 app.get('/metrics', async (req, res) => res.type(client.register.contentType).send(await client.register.metrics()));
 
 // Gateway's own health check - answered here, never proxied
@@ -57,12 +63,23 @@ app.get('/health', (req, res) => res.status(200).json({
 // Unreachable target -> 503, any other proxy failure (reset, timeout) -> 502
 const UNREACHABLE = ['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'EHOSTUNREACH'];
 
+// proxyTimeout only starts once the TCP connection is up. An agent timeout also bounds the
+// connect phase, so a black-holed backend (e.g. a just-deleted Pod IP) can't hang a request for minutes.
+// keepAlive is off on purpose: a Kubernetes Service balances per connection, so one reused
+// connection would pin all traffic to a single replica and make scaling useless.
+// ponytail: new TCP connection per request; fine at lab traffic, revisit (or use a service mesh) at high RPS
+const agents = {
+    'http:': new http.Agent({ keepAlive: false, timeout: PROXY_TIMEOUT_MS }),
+    'https:': new https.Agent({ keepAlive: false, timeout: PROXY_TIMEOUT_MS })
+};
+
 // Routing table is built from the registry, not from literal URLs
 for (const svc of registry) {
     app.use(createProxyMiddleware({
         target: svc.url,
         pathFilter: (path) => routeFor(path) === svc,
         changeOrigin: true,
+        agent: agents[new URL(svc.url).protocol],
         proxyTimeout: PROXY_TIMEOUT_MS,
         on: {
             error: (err, req, res) => {

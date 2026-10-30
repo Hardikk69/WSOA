@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: product-service
-          image: product-service:v2
+          image: product-service:v3
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3002
@@ -33,7 +33,7 @@ spec:
                   name: mongo-secret
                   key: PRODUCT_MONGO_URI
           readinessProbe:
-            httpGet: { path: /, port: 3002 }
+            httpGet: { path: /ready, port: 3002 }
             periodSeconds: 10
           livenessProbe:
             httpGet: { path: /, port: 3002 }

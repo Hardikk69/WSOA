@@ -11,7 +11,7 @@
     </marker>
   </defs>
   <rect width="1000" height="700" fill="#ffffff"/>
-  <text x="500" y="30" text-anchor="middle" font-size="20" font-weight="700" fill="#1e293b">CampusConnect – Lab 8: Kubernetes, CI &amp; Monitoring</text>
+  <text x="500" y="30" text-anchor="middle" font-size="20" font-weight="700" fill="#1e293b">CampusConnect – Lab 8: Kubernetes, CI/CD &amp; Monitoring</text>
 
   <!-- Client -->
   <rect x="250" y="46" width="280" height="46" rx="8" fill="#f1f5f9" stroke="#334155"/>
@@ -41,7 +41,7 @@
   <rect x="48" y="288" width="210" height="104" rx="8" fill="#ffffff" stroke="#1d4ed8"/>
   <text x="153" y="310" text-anchor="middle" font-weight="700">user-service</text>
   <text x="153" y="328" text-anchor="middle" font-size="12" fill="#1e3a8a">ClusterIP :3001</text>
-  <text x="153" y="344" text-anchor="middle" font-size="12" fill="#475569">Deployment, scaled to 3</text>
+  <text x="153" y="344" text-anchor="middle" font-size="12" fill="#475569">Deployment, 3 replicas</text>
   <rect x="83" y="354" width="40" height="26" rx="4" fill="#bfdbfe" stroke="#1d4ed8"/>
   <rect x="133" y="354" width="40" height="26" rx="4" fill="#bfdbfe" stroke="#1d4ed8"/>
   <rect x="183" y="354" width="40" height="26" rx="4" fill="#bfdbfe" stroke="#1d4ed8"/>
@@ -83,7 +83,7 @@
   <text x="46" y="524" font-weight="600" fill="#6d28d9">namespace: monitoring</text>
   <rect x="60" y="560" width="280" height="76" rx="8" fill="#ede9fe" stroke="#6d28d9" stroke-width="1.5"/>
   <text x="200" y="584" text-anchor="middle" font-weight="700">Prometheus</text>
-  <text x="200" y="603" text-anchor="middle" font-size="12" fill="#4c1d95">pod discovery in lab8, scrape every 5s</text>
+  <text x="200" y="603" text-anchor="middle" font-size="12" fill="#4c1d95">pod discovery + kube-state-metrics</text>
   <text x="200" y="620" text-anchor="middle" font-size="11" fill="#475569">up · http_requests_total · http_request_duration_seconds</text>
   <rect x="420" y="560" width="280" height="76" rx="8" fill="#ede9fe" stroke="#6d28d9" stroke-width="1.5"/>
   <text x="560" y="584" text-anchor="middle" font-weight="700">Grafana</text>
@@ -104,14 +104,17 @@
   <text x="742" y="322" text-anchor="middle" font-size="10" fill="#15803d">TLS</text>
 
   <!-- CI -->
-  <rect x="770" y="440" width="214" height="200" rx="10" fill="#f1f5f9" stroke="#334155" stroke-width="1.5"/>
-  <text x="877" y="464" text-anchor="middle" font-weight="700">GitHub Actions CI</text>
-  <text x="877" y="482" text-anchor="middle" font-size="12" fill="#475569">on push / pull_request</text>
-  <text x="877" y="500" text-anchor="middle" font-size="12" fill="#475569">matrix × 4 services</text>
-  <text x="790" y="528" font-size="12">1. actions/checkout</text>
-  <text x="790" y="548" font-size="12">2. setup-node 22</text>
-  <text x="790" y="568" font-size="12">3. npm ci</text>
-  <text x="790" y="588" font-size="12">4. npm test (node --test)</text>
-  <text x="790" y="608" font-size="12">5. docker build :&lt;sha&gt;</text>
-  <text x="877" y="660" text-anchor="middle" font-size="11" fill="#475569">local images :v2 → kind load</text>
+  <rect x="770" y="410" width="214" height="250" rx="10" fill="#f1f5f9" stroke="#334155" stroke-width="1.5"/>
+  <text x="877" y="433" text-anchor="middle" font-weight="700">GitHub Actions CI/CD</text>
+  <text x="877" y="450" text-anchor="middle" font-size="11" fill="#475569">push / PR · matrix × 4 services</text>
+  <text x="786" y="474" font-size="12">1. checkout · setup-node 22</text>
+  <text x="786" y="492" font-size="12">2. npm ci · npm test</text>
+  <text x="786" y="510" font-size="12">3. docker build :&lt;commit-sha&gt;</text>
+  <text x="786" y="528" font-size="12">4. push → GHCR (push only)</text>
+  <text x="786" y="546" font-size="12">5. kind: apply + set image</text>
+  <text x="786" y="564" font-size="12">6. rollout status + smoke test</text>
+  <rect x="786" y="580" width="182" height="40" rx="6" fill="#fef3c7" stroke="#b45309"/>
+  <text x="877" y="597" text-anchor="middle" font-size="11" font-weight="600">ghcr.io/hardikk69/&lt;svc&gt;</text>
+  <text x="877" y="612" text-anchor="middle" font-size="10" fill="#78350f">tag = Git commit SHA</text>
+  <text x="877" y="645" text-anchor="middle" font-size="10" fill="#475569">local: :v3/:v5 → kind load · rollout</text>
 </svg>

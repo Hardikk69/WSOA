@@ -1,5 +1,6 @@
-# Basic CI: for every microservice -> checkout, install, test, build Docker image.
-# Lab 8 services live in Lab-8/; only runs when they change.
+# Lab 8 CI/CD:  git push -> build/test -> Docker image -> GHCR -> Kubernetes deploy -> verification
+# Pull requests run build/test only. Pushes also publish ghcr.io/hardikk69/<service>:<commit-sha>,
+# deploy that exact version to a throwaway kind cluster and verify it through the gateway.
 name: CI
 
 on:
@@ -7,6 +8,14 @@ on:
     paths: ["Lab-8/**", ".github/workflows/ci.yml"]
   pull_request:
     paths: ["Lab-8/**", ".github/workflows/ci.yml"]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io/hardikk69   # GHCR names must be lowercase
+  SERVICES: api-gateway user-service product-service order-service
 
 jobs:
   build-test:
@@ -33,5 +42,84 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Build Docker image
-        run: docker build -t ${{ matrix.service }}:${{ github.sha }} .
+      - name: Build Docker image (tagged with the commit SHA)
+        run: >
+          docker build
+          --label org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          -t $REGISTRY/${{ matrix.service }}:${{ github.sha }} .
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image to GHCR
+        if: github.event_name == 'push'
+        run: docker push $REGISTRY/${{ matrix.service }}:${{ github.sha }}
+
+  deploy:
+    needs: build-test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Lab-8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Kubernetes cluster (kind)
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: lab8-ci
+
+      - name: Prepare namespace, registry access and a stand-in database
+        run: |
+          kubectl create namespace lab8
+          kubectl create secret docker-registry ghcr -n lab8 --docker-server=ghcr.io \
+            --docker-username=${{ github.actor }} --docker-password=${{ secrets.GITHUB_TOKEN }}
+          kubectl patch serviceaccount default -n lab8 -p '{"imagePullSecrets":[{"name":"ghcr"}]}'
+          # CI has no Atlas credentials: a throwaway MongoDB plays Atlas for the smoke test
+          kubectl create deployment mongo --image=mongo:7 -n lab8
+          kubectl expose deployment mongo --port=27017 -n lab8
+          kubectl create secret generic mongo-secret -n lab8 \
+            --from-literal=USER_MONGO_URI=mongodb://mongo:27017/userdb \
+            --from-literal=PRODUCT_MONGO_URI=mongodb://mongo:27017/productdb \
+            --from-literal=ORDER_MONGO_URI=mongodb://mongo:27017/orderdb
+          kubectl rollout status deployment/mongo -n lab8 --timeout=180s
+
+      - name: Deploy manifests and roll out the new image
+        run: |
+          kubectl apply -f k8s/ -n lab8
+          for s in $SERVICES; do
+            kubectl set image deployment/$s $s=$REGISTRY/$s:${{ github.sha }} -n lab8
+          done
+          for s in $SERVICES; do
+            kubectl rollout status deployment/$s -n lab8 --timeout=180s
+          done
+          kubectl get deployments,pods,services -n lab8 -o wide
+
+      - name: Verify through the gateway
+        run: |
+          kubectl port-forward svc/api-gateway 8000:8000 -n lab8 &
+          sleep 5
+          curl -fsS localhost:8000/health
+          USER=$(curl -fsS -X POST localhost:8000/users -H 'Content-Type: application/json' \
+            -d '{"name":"CI User","email":"ci@example.com","semester":3}')
+          PRODUCT=$(curl -fsS -X POST localhost:8000/products -H 'Content-Type: application/json' \
+            -d '{"name":"CI Pen","price":10,"stock":5}')
+          echo "$USER"; echo "$PRODUCT"
+          # order-service reaches user-service / product-service through their Service DNS names
+          curl -fsS -X POST localhost:8000/orders -H 'Content-Type: application/json' \
+            -d "{\"userId\":$(echo "$USER" | jq .id),\"productId\":$(echo "$PRODUCT" | jq .id),\"quantity\":2}"
+          echo
+          kubectl get deployments -n lab8 -o custom-columns='NAME:.metadata.name,IMAGE:.spec.template.spec.containers[0].image,READY:.status.readyReplicas'
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          kubectl get pods -n lab8 -o wide
+          kubectl describe pods -n lab8 | tail -80
+          for s in $SERVICES; do kubectl logs deployment/$s -n lab8 --tail=30 || true; done
